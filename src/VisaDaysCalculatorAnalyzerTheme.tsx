@@ -275,6 +275,7 @@ function YearCalendar({
   asOfDate,
   onToggleDay,
   onApplyRange,
+  onCommitRange,
   brushMode = "auto",
   plannedStartISO = null,
   plannedEndISO = null,
@@ -288,13 +289,19 @@ function YearCalendar({
   const [drag, setDrag] = useState({ on: false, mode: null as null | "add" | "remove" });
   const lastRef = useRef<string | null>(null);
   useEffect(() => {
-    const up = () => setDrag({ on: false, mode: null });
+    const up = () =>
+      setDrag((cur) => {
+        if (cur.on) {
+          onCommitRange && onCommitRange();
+        }
+        return { on: false, mode: null };
+      });
     if (typeof window !== "undefined") {
       window.addEventListener("mouseup", up);
       return () => window.removeEventListener("mouseup", up);
     }
     return () => {};
-  }, []);
+  }, [onCommitRange]);
 
   const getMode = (iso: string) => (brushMode === "auto" ? (usedSet.has(iso) ? "remove" : "add") : brushMode);
   const onDown = (e: any, iso: string) => {
@@ -303,7 +310,7 @@ function YearCalendar({
     if (e.shiftKey && lastRef.current) {
       onApplyRange(lastRef.current, iso, mode);
     } else {
-      onApplyRange(iso, iso, mode);
+      onApplyRange(iso, iso, mode, { transient: true });
       setDrag({ on: true, mode });
     }
     lastRef.current = iso;
@@ -311,13 +318,24 @@ function YearCalendar({
   const onEnter = (e: any, iso: string) => {
     onHoverDay && onHoverDay(iso);
     if (!drag.on || !drag.mode) return;
-    onApplyRange(iso, iso, drag.mode);
+    onApplyRange(iso, iso, drag.mode, { transient: true });
   };
 
   const planned = (iso: string) => (plannedStartISO && plannedEndISO ? plannedStartISO <= iso && iso <= plannedEndISO : false);
 
   return (
-    <div className="space-y-4" onMouseLeave={() => onHoverDay && onHoverDay(null)}>
+    <div
+      className="space-y-4"
+      onMouseLeave={() => {
+        onHoverDay && onHoverDay(null);
+        setDrag((cur) => {
+          if (cur.on) {
+            onCommitRange && onCommitRange();
+          }
+          return { on: false, mode: null };
+        });
+      }}
+    >
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
         <div className="text-xs sm:text-sm" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
@@ -335,7 +353,17 @@ function YearCalendar({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" onMouseLeave={() => setDrag({ on: false, mode: null })}>
+      <div
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        onMouseLeave={() =>
+          setDrag((cur) => {
+            if (cur.on) {
+              onCommitRange && onCommitRange();
+            }
+            return { on: false, mode: null };
+          })
+        }
+      >
         {Array.from({ length: 12 }).map((_, m) => {
           const off = mondayOffset(year, m);
           const days = Array.from({ length: dim(year, m) }, (_, i) => i + 1);
@@ -344,10 +372,10 @@ function YearCalendar({
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="font-semibold">{MONTHS[m]} {year}</div>
                 <div className="flex flex-wrap items-center gap-1 text-[10px] sm:text-[11px]">
-                  <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "all", brushMode === "remove" ? "remove" : "add", onApplyRange)}>Месяц</button>
-                  <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "weekdays", brushMode === "remove" ? "remove" : "add", onApplyRange)}>Будни</button>
-                  <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "weekends", brushMode === "remove" ? "remove" : "add", onApplyRange)}>Выходные</button>
-                  <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "clear", "remove", onApplyRange)}>Очистить</button>
+                  <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "all", brushMode === "remove" ? "remove" : "add", onApplyRange, onCommitRange)}>Месяц</button>
+                  <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "weekdays", brushMode === "remove" ? "remove" : "add", onApplyRange, onCommitRange)}>Будни</button>
+                  <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "weekends", brushMode === "remove" ? "remove" : "add", onApplyRange, onCommitRange)}>Выходные</button>
+                  <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "clear", "remove", onApplyRange, onCommitRange)}>Очистить</button>
                 </div>
               </div>
               <div className="grid grid-cols-7 gap-1 text-[10px] sm:text-[11px]" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
@@ -403,11 +431,12 @@ function applyMonthPreset(
   m: number,
   preset: "all" | "weekdays" | "weekends" | "clear",
   mode: "add" | "remove",
-  onApplyRange: (a: string, b: string, mode: "add" | "remove") => void
+  onApplyRange: (a: string, b: string, mode: "add" | "remove", options?: { transient?: boolean }) => void,
+  onCommitRange?: () => void
 ) {
   const d = dim(y, m);
   let run: Date | null = null;
-  const flush = (s: Date, e: Date) => onApplyRange(toISO(s), toISO(e), mode);
+  const flush = (s: Date, e: Date) => onApplyRange(toISO(s), toISO(e), mode, { transient: true });
   for (let day = 1; day <= d; day++) {
     const dt = new Date(Date.UTC(y, m, day));
     const dow = dt.getUTCDay();
@@ -427,6 +456,7 @@ function applyMonthPreset(
     }
   }
   if (run) flush(run, new Date(Date.UTC(y, m, d)));
+  onCommitRange && onCommitRange();
 }
 
 // ===== Tests =====
@@ -536,6 +566,10 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
     const payload = trips.map((iv) => ({ id: iv.id, start: toISO(iv.start), end: toISO(iv.end) }));
     window.localStorage.setItem("visa_ru_trips_v2", JSON.stringify(payload));
   }, [trips, storageAvailable]);
+  const tripsRef = useRef(trips);
+  useEffect(() => {
+    tripsRef.current = trips;
+  }, [trips]);
 
   const [startISO, setStartISO] = useState("");
   const [endISO, setEndISO] = useState("");
@@ -558,6 +592,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
   const historyRef = useRef<{ stack: any[]; index: number }>({ stack: [], index: -1 });
   const serialize = (arr: Trip[]) => arr.map((t) => ({ id: t.id, start: toISO(t.start), end: toISO(t.end) }));
   const deserialize = (arr: any[]) => arr.map((t) => ({ id: t.id || newId(), start: parseISO(t.start), end: parseISO(t.end) }));
+  const pendingRangeCommit = useRef(false);
   const pushHistory = (next: Trip[]) => {
     const h = historyRef.current;
     const snap = serialize(next);
@@ -570,12 +605,14 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
     h.index++;
   };
   const undo = () => {
+    pendingRangeCommit.current = false;
     const h = historyRef.current;
     if (h.index <= 0) return;
     h.index--;
     setTrips(deserialize(h.stack[h.index]));
   };
   const redo = () => {
+    pendingRangeCommit.current = false;
     const h = historyRef.current;
     if (h.index >= h.stack.length - 1) return;
     h.index++;
@@ -666,26 +703,26 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
   const recommendationCards = [
     {
       id: "today",
-      heading: "Въезд сейчас",
-      value: todayMax > 0 ? `${todayMax} дн.` : "Нет",
+      heading: "Если въехать сегодня",
+      value: todayMax > 0 ? `${todayMax} дн.` : "Нет свободных дней",
       meta: `Дата въезда: ${toISO(asOf)}`,
-      note: todayExit ? `Выезд не позднее ${todayExit}` : "Лимит на сегодня израсходован",
+      note: todayExit ? `Выехать до ${todayExit}` : "Свободных дней на сегодня нет",
       action: todayMax > 0 ? () => setPlanISO(toISO(asOf)) : null,
     },
     {
       id: "soon",
-      heading: "Ближайшее окно",
-      value: recAny ? `${recAny.max} дн.` : "Нет",
-      meta: recAny ? `Можно въехать ${toISO(recAny.date)}` : "В горизонте окна нет",
-      note: recAny ? "Подходит даже для короткой поездки" : "Попробуйте освободить дни",
+      heading: "Первая доступная дата",
+      value: recAny ? `${recAny.max} дн.` : "Нет свободных дней",
+      meta: recAny ? `Въезд возможен ${toISO(recAny.date)}` : "Сейчас все дни заняты",
+      note: recAny ? "Подходит для короткого визита" : "Попробуйте снять отметки в календаре",
       action: recAny ? () => setPlanISO(toISO(recAny.date)) : null,
     },
     {
       id: "full",
-      heading: `На максимум (${fullTarget(rule)} дн.)`,
-      value: recFull ? `${recFull.max} дн.` : "Нет",
-      meta: recFull ? `Рекомендуемый въезд ${toISO(recFull.date)}` : "Окно пока не доступно",
-      note: recFull ? "Подходит для длинного визита" : "Освободите больше дней",
+      heading: `Окно на ${fullTarget(rule)} дн.`,
+      value: recFull ? `${recFull.max} дн.` : "Нет свободных дней",
+      meta: recFull ? `Лучше въехать ${toISO(recFull.date)}` : "Пока нет такого окна",
+      note: recFull ? "Можно провести длинную поездку" : "Нужно освободить больше дней",
       action: recFull ? () => setPlanISO(toISO(recFull.date)) : null,
     },
   ];
@@ -702,6 +739,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
   const canRedo = historyRef.current.index < historyRef.current.stack.length - 1;
 
   function addInterval() {
+    pendingRangeCommit.current = false;
     if (!startISO || !endISO) {
       showToast("Укажите даты въезда/выезда", "warn");
       return;
@@ -735,6 +773,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
     showToast("Диапазон подставлен в ручной ввод");
   }
   function clearAll() {
+    pendingRangeCommit.current = false;
     if (typeof window !== "undefined" && !window.confirm("Удалить все?")) {
       return;
     }
@@ -743,6 +782,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
     showToast("История очищена");
   }
   function onToggleDay(iso: string) {
+    pendingRangeCommit.current = false;
     const d = parseISO(iso);
     let next: Trip[];
     if (isDateInClosedTrips(trips, d)) {
@@ -754,7 +794,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
     pushHistory(next);
     setTrips(next);
   }
-  function applyRange(isoA: string, isoB: string, mode: "add" | "remove") {
+  function applyRange(isoA: string, isoB: string, mode: "add" | "remove", options: { transient?: boolean } = {}) {
     const a = parseISO(isoA), b = parseISO(isoB);
     const s = +a <= +b ? a : b;
     const e = +a <= +b ? b : a;
@@ -779,10 +819,20 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
         }
       }
       if (areTripsEqual(next, prev)) return prev;
+      if (options.transient) {
+        pendingRangeCommit.current = true;
+        return next;
+      }
+      pendingRangeCommit.current = false;
       pushHistory(next);
       return next;
     });
   }
+  const commitPendingRange = () => {
+    if (!pendingRangeCommit.current) return;
+    pendingRangeCommit.current = false;
+    pushHistory(tripsRef.current);
+  };
   function exportJSON() {
     const payload = trips.map((t) => ({ start: toISO(t.start), end: toISO(t.end) }));
     const blob = new Blob([JSON.stringify({ rule, trips: payload }, null, 2)], { type: "application/json" });
@@ -794,6 +844,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
     URL.revokeObjectURL(url);
   }
   function importJSON(e: any) {
+    pendingRangeCommit.current = false;
     const f = e.target.files?.[0];
     if (!f) return;
     const reader = new FileReader();
@@ -818,6 +869,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
     e.target.value = "";
   }
   function deleteTrip(id: string) {
+    pendingRangeCommit.current = false;
     const next = mergeIntervals(trips.filter((t) => t.id !== id));
     if (areTripsEqual(next, trips)) return;
     pushHistory(next);
@@ -908,20 +960,20 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
                     <p className={"text-xs " + subtleText}>Расчёт ведётся в UTC. Сейчас: {toISO(today)}</p>
                   </div>
                   <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50") + " rounded-2xl border p-4 shadow-sm"}>
-                    <div className="text-sm font-semibold">Правило пребывания</div>
-                    <p className={"mt-2 text-xs leading-relaxed " + (isDark ? "text-slate-300" : "text-slate-600")}>{ruleDescription}</p>
-                    <p className={"mt-3 text-xs leading-relaxed " + (isDark ? "text-slate-400" : "text-slate-500")}>{(selected as any).notes}</p>
+                    <div className="text-sm font-semibold">Как считаем лимит</div>
+                    <p className={"mt-2 text-sm leading-relaxed " + (isDark ? "text-slate-300" : "text-slate-600")}>{ruleDescription}</p>
+                    <p className={"mt-3 text-sm leading-relaxed " + (isDark ? "text-slate-400" : "text-slate-500")}>{(selected as any).notes}</p>
                   </div>
                 </div>
                 <div className="min-w-0 space-y-4">
                   <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " rounded-2xl border p-5 shadow-sm space-y-4"}>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <div className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Использование лимита</div>
+                        <div className="text-sm font-medium" style={{ color: isDark ? "#94a3b8" : "#475569" }}>Израсходовано дней</div>
                         <div className="mt-2 text-3xl font-semibold tabular-nums">{limit != null ? `${usedRolling} дн.` : "—"}</div>
                       </div>
                       <div className="text-left sm:text-right">
-                        <div className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Остаток</div>
+                        <div className="text-sm font-medium" style={{ color: isDark ? "#94a3b8" : "#475569" }}>Осталось в запасе</div>
                         <div className="mt-2 text-2xl font-semibold tabular-nums">{remainder != null ? `${remainder} дн.` : "—"}</div>
                         {usagePercent != null && <div className={"mt-1 text-xs " + subtleText}>{usagePercent}% лимита</div>}
                       </div>
@@ -933,18 +985,18 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
                     ) : (
                       <div className={"text-xs leading-relaxed " + subtleText}>Правило без суммарного лимита — следите за длительностью каждого визита отдельно.</div>
                     )}
-                    <div className="grid gap-2 text-xs sm:grid-cols-2">
-                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Окно расчёта: {windowRangeLabel}</span>
-                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Фиксированный лимит: {limitLabel}</span>
-                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Поездок отмечено: {sortedTrips.length}</span>
-                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Дней в истории: {totalDays}</span>
+                    <div className="grid gap-2 text-sm sm:grid-cols-2">
+                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Считаем окно: {windowRangeLabel}</span>
+                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Предел в окне: {limitLabel}</span>
+                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Поездок сохранено: {sortedTrips.length}</span>
+                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Всего дней отмечено: {totalDays}</span>
                     </div>
                   </div>
                   <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " rounded-2xl border p-5 shadow-sm space-y-3"}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <div className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Дни в текущем окне</div>
-                        <div className={"text-sm " + subtleText}>Окрашенные даты засчитываются в лимит. Наведите на календарь для точного числа.</div>
+                        <div className="text-sm font-medium" style={{ color: isDark ? "#94a3b8" : "#475569" }}>Дни, которые уже считаются</div>
+                        <div className={"text-sm " + subtleText}>Подсвеченные даты входят в лимит. Наведите на календарь, чтобы увидеть точное число.</div>
                       </div>
                       {hoverISO && (
                         <div className="text-right text-sm">
@@ -987,111 +1039,111 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
           </Card>
 
           {/* Planner */}
-          <Card isDark={isDark} className="md:col-span-5 min-w-0">
-            <div className="flex flex-col gap-5">
-              <div>
-                <h2 className="text-lg font-semibold">Планировщик въезда</h2>
-                <p className={"mt-1 text-sm " + subtleText}>Выберите предполагаемую дату — калькулятор покажет доступную длительность визита и крайний срок выезда.</p>
-              </div>
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="space-y-2">
-                  <span className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Если въехать</span>
-                  <input
-                    type="date"
-                    value={planISO}
-                    onChange={(e) => setPlanISO((e.target as any).value)}
-                    className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm"}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <span className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Можно находиться</span>
-                  <div className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " rounded-xl border px-3 py-2.5 text-sm tabular-nums"}>{plannedMax ? `${plannedMax} дн.` : "—"}</div>
-                </div>
-                <div className="space-y-2">
-                  <span className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Выехать до</span>
-                  <div className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " rounded-xl border px-3 py-2.5 text-sm tabular-nums"}>{plannedExit || "—"}</div>
-                </div>
-              </div>
-            <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50") + " rounded-2xl border p-4 space-y-2"}>
-              {planDate ? (
-                plannedMax > 0 ? (
-                  <>
-                    <div className="text-sm font-semibold">Въезд {planISO || toISO(planDate)} → {plannedExit}</div>
-                    <div className={"text-sm " + (isDark ? "text-emerald-200" : "text-emerald-700")}>Доступно {plannedMax} дн. пребывания.</div>
-                    <p className={"text-xs " + subtleText}>Чтобы сохранить поездку, нажмите «Подставить в ручной ввод» или отметьте дни прямо в календаре.</p>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-sm font-semibold">На дату {planISO || toISO(planDate)} нет свободных дней.</div>
-                    <p className={"text-xs " + subtleText}>Выберите дату из рекомендаций выше или освободите дни, сняв отметки в календаре.</p>
-                  </>
-                )
-              ) : (
-                <p className={"text-sm " + subtleText}>Выберите дату вручную или воспользуйтесь рекомендациями — мы сразу посчитаем лимит.</p>
-              )}
-            </div>
-            <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " rounded-2xl border p-4 shadow-sm"}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="md:col-span-5 flex min-w-0 flex-col gap-4">
+            <Card isDark={isDark}>
+              <div className="space-y-3">
                 <div>
-                  <div className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Ручной ввод</div>
-                  <p className={"text-xs " + subtleText}>Быстро добавьте известный диапазон дат.</p>
+                  <h3 className="text-base font-semibold">Ручной ввод</h3>
+                  <p className={"text-sm " + subtleText}>Укажите даты поездки и нажмите «Добавить». Мы объединим их с соседними поездками, чтобы не было разрывов.</p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5">
+                  <label className="sm:col-span-2 text-sm">
+                    <span className={"block text-sm " + subtleText}>Дата въезда</span>
+                    <input
+                      type="date"
+                      value={startISO}
+                      onChange={(e) => setStartISO((e.target as any).value)}
+                      className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm"}
+                    />
+                  </label>
+                  <label className="sm:col-span-2 text-sm">
+                    <span className={"block text-sm " + subtleText}>Дата выезда</span>
+                    <input
+                      type="date"
+                      value={endISO}
+                      onChange={(e) => setEndISO((e.target as any).value)}
+                      className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm"}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addInterval}
+                    disabled={!canAddManual}
+                    className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + ` sm:col-span-1 mt-6 inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition ${canAddManual ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed"}`}
+                  >
+                    Добавить
+                  </button>
                 </div>
                 {manualRange ? (
                   manualRange.valid ? (
-                    <span className="text-xs font-medium" style={{ color: isDark ? "#86efac" : "#15803d" }}>{manualRange.days} дн.</span>
+                    <span className="text-sm" style={{ color: isDark ? "#86efac" : "#15803d" }}>Поездка займет {manualRange.days} дн.</span>
                   ) : (
-                    <span className="text-xs font-medium text-amber-400">Проверьте даты</span>
+                    <span className="text-sm text-amber-400">Дата выезда должна быть позже даты въезда.</span>
                   )
-                ) : null}
+                ) : (
+                  <span className={"text-sm " + subtleText}>Если даты неизвестны, отметьте нужные дни прямо в календаре ниже.</span>
+                )}
               </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-5">
-                <label className="sm:col-span-2">
-                  <span className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Въезд</span>
-                  <input
-                    type="date"
-                    value={startISO}
-                    onChange={(e) => setStartISO((e.target as any).value)}
-                    className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm"}
-                  />
-                </label>
-                <label className="sm:col-span-2">
-                  <span className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Выезд</span>
-                  <input
-                    type="date"
-                    value={endISO}
-                    onChange={(e) => setEndISO((e.target as any).value)}
-                    className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm"}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={addInterval}
-                  disabled={!canAddManual}
-                  className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + ` sm:col-span-1 inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition ${canAddManual ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed"}`}
-                >
-                  Добавить
-                </button>
+            </Card>
+
+            <Card isDark={isDark}>
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-base font-semibold">Планировщик въезда</h3>
+                  <p className={"text-sm " + subtleText}>Выберите дату въезда, и калькулятор покажет сколько дней можно провести и когда нужно выехать.</p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div>
+                    <label className="text-sm" style={{ color: isDark ? "#CBD5E1" : "#334155" }}>Дата въезда</label>
+                    <input type="date" value={planISO} onChange={(e) => setPlanISO((e.target as any).value)} className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " mt-1 w-full rounded-lg border px-3 py-2"} />
+                  </div>
+                  <div>
+                    <label className="text-sm" style={{ color: isDark ? "#CBD5E1" : "#334155" }}>Можно находиться</label>
+                    <div className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " mt-1 rounded-lg border px-3 py-2 tabular-nums"}>{plannedMax ? `${plannedMax} дн.` : "—"}</div>
+                  </div>
+                  <div>
+                    <label className="text-sm" style={{ color: isDark ? "#CBD5E1" : "#334155" }}>Выехать до</label>
+                    <div className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " mt-1 rounded-lg border px-3 py-2 tabular-nums"}>{plannedExit || "—"}</div>
+                  </div>
+                </div>
+                <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50") + " rounded-2xl border p-4 space-y-2"}>
+                  {planDate ? (
+                    plannedMax > 0 ? (
+                      <>
+                        <div className="text-sm font-semibold">Въезд {planISO || toISO(planDate)} → {plannedExit}</div>
+                        <div className={"text-sm " + (isDark ? "text-emerald-200" : "text-emerald-700")}>Можно провести {plannedMax} дн.</div>
+                        <p className={"text-sm " + subtleText}>Нажмите «Перенести в ручной ввод», чтобы сохранить поездку.</p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-sm font-semibold">На дату {planISO || toISO(planDate)} свободных дней нет.</div>
+                        <p className={"text-sm " + subtleText}>Выберите другую дату из рекомендаций или снимите отметки в календаре.</p>
+                      </>
+                    )
+                  ) : (
+                    <p className={"text-sm " + subtleText}>Можно выбрать дату из рекомендаций выше или ввести её вручную.</p>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={pushPlanToForm}
+                    disabled={!canPushPlan}
+                    type="button"
+                    className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + ` inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${canPushPlan ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed"}`}
+                  >
+                    Перенести в ручной ввод
+                  </button>
+                  <button
+                    onClick={() => setPlanISO("")}
+                    type="button"
+                    className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm"}
+                  >
+                    Сбросить дату
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={pushPlanToForm}
-                disabled={!canPushPlan}
-                type="button"
-                  className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + ` inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${canPushPlan ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed"}`}
-                >
-                  Подставить в ручной ввод
-                </button>
-                <button
-                  onClick={() => setPlanISO("")}
-                  type="button"
-                  className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm"}
-                >
-                  Сбросить дату
-                </button>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
         </div>
       </section>
 
@@ -1165,6 +1217,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
               asOfDate={asOf}
               onToggleDay={onToggleDay}
               onApplyRange={applyRange}
+              onCommitRange={commitPendingRange}
               brushMode={brushMode}
               plannedStartISO={planISO || null}
               plannedEndISO={plannedExit || null}
