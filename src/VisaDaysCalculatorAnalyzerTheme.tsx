@@ -522,6 +522,7 @@ function areTripsEqual(a: Trip[], b: Trip[]) {
 export default function VisaDaysCalculatorAnalyzerTheme() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const isDark = theme === "dark";
+  const storageAvailable = typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 
   const today = useMemo(() => {
     const n = new Date();
@@ -531,7 +532,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
   const [selected, setSelected] = useState(COUNTRY_PRESETS[0]);
 
   const [trips, setTrips] = useState<Trip[]>(() => {
-    if (typeof window === "undefined") return [];
+    if (!storageAvailable) return [] as Trip[];
     const raw = window.localStorage.getItem("visa_ru_trips_v2");
     if (!raw) return [] as Trip[];
     try {
@@ -542,10 +543,10 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
     }
   });
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (!storageAvailable) return;
     const payload = trips.map((iv) => ({ id: iv.id, start: toISO(iv.start), end: toISO(iv.end) }));
     window.localStorage.setItem("visa_ru_trips_v2", JSON.stringify(payload));
-  }, [trips]);
+  }, [trips, storageAvailable]);
 
   const [startISO, setStartISO] = useState("");
   const [endISO, setEndISO] = useState("");
