@@ -540,6 +540,15 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
   const [startISO, setStartISO] = useState("");
   const [endISO, setEndISO] = useState("");
 
+  const manualRange = useMemo<{ valid: boolean; days?: number } | null>(() => {
+    if (!startISO || !endISO) return null;
+    const start = parseISO(startISO);
+    const end = parseISO(endISO);
+    if (+end < +start) return { valid: false };
+    return { valid: true, days: diffDaysInc(end, start) };
+  }, [startISO, endISO]);
+  const canAddManual = manualRange?.valid === true;
+
   const [asOfISO, setAsOfISO] = useState("");
   const asOf = useMemo(() => (asOfISO ? parseISO(asOfISO) : today), [asOfISO, today]);
 
@@ -1003,29 +1012,72 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
                   <div className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " rounded-xl border px-3 py-2.5 text-sm tabular-nums"}>{plannedExit || "—"}</div>
                 </div>
               </div>
-              <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50") + " rounded-2xl border p-4 space-y-2"}>
-                {planDate ? (
-                  plannedMax > 0 ? (
-                    <>
-                      <div className="text-sm font-semibold">Въезд {planISO || toISO(planDate)} → {plannedExit}</div>
-                      <div className={"text-sm " + (isDark ? "text-emerald-200" : "text-emerald-700")}>Доступно {plannedMax} дн. пребывания.</div>
-                      <p className={"text-xs " + subtleText}>Чтобы сохранить поездку, нажмите «Подставить в ручной ввод» или отметьте дни прямо в календаре.</p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-sm font-semibold">На дату {planISO || toISO(planDate)} нет свободных дней.</div>
-                      <p className={"text-xs " + subtleText}>Выберите дату из рекомендаций выше или освободите дни, сняв отметки в календаре.</p>
-                    </>
-                  )
+            <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50") + " rounded-2xl border p-4 space-y-2"}>
+              {planDate ? (
+                plannedMax > 0 ? (
+                  <>
+                    <div className="text-sm font-semibold">Въезд {planISO || toISO(planDate)} → {plannedExit}</div>
+                    <div className={"text-sm " + (isDark ? "text-emerald-200" : "text-emerald-700")}>Доступно {plannedMax} дн. пребывания.</div>
+                    <p className={"text-xs " + subtleText}>Чтобы сохранить поездку, нажмите «Подставить в ручной ввод» или отметьте дни прямо в календаре.</p>
+                  </>
                 ) : (
-                  <p className={"text-sm " + subtleText}>Выберите дату вручную или воспользуйтесь рекомендациями — мы сразу посчитаем лимит.</p>
-                )}
+                  <>
+                    <div className="text-sm font-semibold">На дату {planISO || toISO(planDate)} нет свободных дней.</div>
+                    <p className={"text-xs " + subtleText}>Выберите дату из рекомендаций выше или освободите дни, сняв отметки в календаре.</p>
+                  </>
+                )
+              ) : (
+                <p className={"text-sm " + subtleText}>Выберите дату вручную или воспользуйтесь рекомендациями — мы сразу посчитаем лимит.</p>
+              )}
+            </div>
+            <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " rounded-2xl border p-4 shadow-sm"}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Ручной ввод</div>
+                  <p className={"text-xs " + subtleText}>Быстро добавьте известный диапазон дат.</p>
+                </div>
+                {manualRange ? (
+                  manualRange.valid ? (
+                    <span className="text-xs font-medium" style={{ color: isDark ? "#86efac" : "#15803d" }}>{manualRange.days} дн.</span>
+                  ) : (
+                    <span className="text-xs font-medium text-amber-400">Проверьте даты</span>
+                  )
+                ) : null}
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="mt-3 grid gap-2 sm:grid-cols-5">
+                <label className="sm:col-span-2">
+                  <span className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Въезд</span>
+                  <input
+                    type="date"
+                    value={startISO}
+                    onChange={(e) => setStartISO((e.target as any).value)}
+                    className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm"}
+                  />
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Выезд</span>
+                  <input
+                    type="date"
+                    value={endISO}
+                    onChange={(e) => setEndISO((e.target as any).value)}
+                    className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm"}
+                  />
+                </label>
                 <button
-                  onClick={pushPlanToForm}
-                  disabled={!canPushPlan}
                   type="button"
+                  onClick={addInterval}
+                  disabled={!canAddManual}
+                  className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + ` sm:col-span-1 inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition ${canAddManual ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed"}`}
+                >
+                  Добавить
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={pushPlanToForm}
+                disabled={!canPushPlan}
+                type="button"
                   className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + ` inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${canPushPlan ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed"}`}
                 >
                   Подставить в ручной ввод
@@ -1126,69 +1178,43 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
 
       {/* Trips list and editor */}
       <section className="relative z-10 mx-auto max-w-7xl px-4 pb-4 pt-2 sm:px-6">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card isDark={isDark}>
-            <h2 className="text-lg font-semibold">Ручной ввод</h2>
-            <p className={"text-sm " + subtleText}>Добавьте диапазон, если уже знаете даты въезда и выезда.</p>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div>
-                <label className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Въезд</label>
-                <input type="date" value={startISO} onChange={(e) => setStartISO((e.target as any).value)} className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " w-full rounded-lg border px-3 py-2"} />
+        <Card isDark={isDark}>
+          <h2 className="text-lg font-semibold">Ваши поездки</h2>
+          <p className={"text-sm " + subtleText}>Список автоматически объединяет пересечения. Можно удалить поездку целиком.</p>
+          <div className="mt-4 max-h-72 overflow-y-auto pr-1">
+            {sortedTrips.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-white/10 p-4 text-sm" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+                Пока ничего нет. Кликните даты в календаре или добавьте диапазон вручную.
               </div>
-              <div>
-                <label className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Выезд</label>
-                <input type="date" value={endISO} onChange={(e) => setEndISO((e.target as any).value)} className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " w-full rounded-lg border px-3 py-2"} />
-              </div>
-              <div className="flex items-end">
-                <button onClick={addInterval} className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">Добавить поездку</button>
-              </div>
-            </div>
-            <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span>Всего поездок: {sortedTrips.length}</span>
-                <span>Дней в поездках: {totalDays}</span>
-              </div>
-            </div>
-          </Card>
-
-          <Card isDark={isDark}>
-            <h2 className="text-lg font-semibold">Ваши поездки</h2>
-            <p className={"text-sm " + subtleText}>Список автоматически объединяет пересечения. Можно удалить поездку целиком.</p>
-            <div className="mt-4 max-h-72 overflow-y-auto pr-1">
-              {sortedTrips.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/10 p-4 text-sm" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
-                  Пока ничего нет. Кликните даты в календаре или добавьте диапазон вручную.
-                </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
-                    <tr className="text-left">
-                      <th className="pb-2">Въезд</th>
-                      <th className="pb-2">Выезд</th>
-                      <th className="pb-2">Дней</th>
-                      <th className="pb-2 text-right">&nbsp;</th>
+            ) : (
+              <table className="w-full text-sm">
+                <thead style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+                  <tr className="text-left">
+                    <th className="pb-2">Въезд</th>
+                    <th className="pb-2">Выезд</th>
+                    <th className="pb-2">Дней</th>
+                    <th className="pb-2 text-right">&nbsp;</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedTrips.map((trip) => (
+                    <tr key={trip.id} className="border-t border-white/10">
+                      <td className="py-2 font-mono text-xs sm:text-sm">{toISO(trip.start)}</td>
+                      <td className="py-2 font-mono text-xs sm:text-sm">{toISO(trip.end)}</td>
+                      <td className="py-2">{diffDaysInc(trip.end, trip.start)}</td>
+                      <td className="py-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setPlanISO(toISO(trip.start))} className="rounded border border-white/10 px-2 py-1 text-xs hover:bg-white/10">В план</button>
+                          <button onClick={() => deleteTrip(trip.id)} className="rounded border border-white/10 px-2 py-1 text-xs text-red-200 hover:bg-red-400/20">Удалить</button>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {sortedTrips.map((trip) => (
-                      <tr key={trip.id} className="border-t border-white/10">
-                        <td className="py-2 font-mono text-xs sm:text-sm">{toISO(trip.start)}</td>
-                        <td className="py-2 font-mono text-xs sm:text-sm">{toISO(trip.end)}</td>
-                        <td className="py-2">{diffDaysInc(trip.end, trip.start)}</td>
-                        <td className="py-2 text-right">
-                          <div className="flex justify-end gap-2">
-                            <button onClick={() => setPlanISO(toISO(trip.start))} className="rounded border border-white/10 px-2 py-1 text-xs hover:bg-white/10">В план</button>
-                            <button onClick={() => deleteTrip(trip.id)} className="rounded border border-white/10 px-2 py-1 text-xs text-red-200 hover:bg-red-400/20">Удалить</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </Card>
-        </div>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </Card>
       </section>
 
       {/* How it works */}
