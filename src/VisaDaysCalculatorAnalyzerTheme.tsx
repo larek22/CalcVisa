@@ -219,7 +219,7 @@ const Step = ({ index, label, active, done, isDark }: any) => (
 
 const Card = ({ children, className = "", isDark }: any) => (
   <div
-    className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " relative rounded-2xl border p-5 shadow-xl backdrop-blur-sm transition-colors " + className}
+    className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " relative w-full max-w-full rounded-2xl border p-5 shadow-xl backdrop-blur-sm transition-colors " + className}
     style={{ boxShadow: isDark ? "0 10px 40px rgba(0,0,0,0.35)" : "0 10px 30px rgba(15,23,42,0.08)" }}
   >
     <div className="pointer-events-none absolute inset-0 rounded-2xl" style={{ boxShadow: `inset 0 0 0 1px ${isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)"}` }} />
@@ -319,11 +319,11 @@ function YearCalendar({
   return (
     <div className="space-y-4" onMouseLeave={() => onHoverDay && onHoverDay(null)}>
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+        <div className="text-xs sm:text-sm" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
           Клик = вкл/выкл. Тяните мышью, <b>Shift+клик</b> — диапазон. Режим кисти влияет на drag/диапазоны.
         </div>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <span style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Кисть:</span>
           <div className="inline-flex overflow-hidden rounded-xl border border-white/10 bg-white/5">
             {["auto", "add", "remove"].map((m) => (
@@ -335,22 +335,22 @@ function YearCalendar({
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3" onMouseLeave={() => setDrag({ on: false, mode: null })}>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" onMouseLeave={() => setDrag({ on: false, mode: null })}>
         {Array.from({ length: 12 }).map((_, m) => {
           const off = mondayOffset(year, m);
           const days = Array.from({ length: dim(year, m) }, (_, i) => i + 1);
           return (
-            <div key={m} className="rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur">
-              <div className="mb-2 flex items-center justify-between">
+            <div key={m} className="rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur sm:p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="font-semibold">{MONTHS[m]} {year}</div>
-                <div className="flex items-center gap-1 text-[11px]">
+                <div className="flex flex-wrap items-center gap-1 text-[10px] sm:text-[11px]">
                   <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "all", brushMode === "remove" ? "remove" : "add", onApplyRange)}>Месяц</button>
                   <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "weekdays", brushMode === "remove" ? "remove" : "add", onApplyRange)}>Будни</button>
                   <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "weekends", brushMode === "remove" ? "remove" : "add", onApplyRange)}>Выходные</button>
                   <button className="rounded border border-white/10 px-2 py-1 hover:bg-white/10" onClick={() => applyMonthPreset(year, m, "clear", "remove", onApplyRange)}>Очистить</button>
                 </div>
               </div>
-              <div className="grid grid-cols-7 gap-1 text-[11px]" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+              <div className="grid grid-cols-7 gap-1 text-[10px] sm:text-[11px]" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
                 {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d) => (
                   <div key={d} className="text-center">{d}</div>
                 ))}
@@ -372,7 +372,7 @@ function YearCalendar({
                       onClick={() => {
                         if (!drag.on) onToggleDay(iso);
                       }}
-                      className={`relative flex h-9 items-center justify-center rounded-md border text-sm tabular-nums focus:outline-none focus:ring-2 ${isDark ? "border-white/10" : "border-slate-300"}`}
+                      className={`relative flex h-8 items-center justify-center rounded-md border text-xs tabular-nums focus:outline-none focus:ring-2 transition-colors sm:h-9 sm:text-sm ${isDark ? "border-white/10" : "border-slate-300"}`}
                       style={{ background: used ? ACCENT : isDark ? "rgba(255,255,255,0.04)" : "#fff", color: used ? "#0b0f14" : undefined, boxShadow: isToday ? `0 0 0 2px ${ACCENT}` : undefined }}
                       title={`${iso} — ${used ? "в зоне (клик/drag: снять)" : "свободно (клик/drag: отметить)"}`}
                     >
@@ -824,13 +824,13 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
       <Toast toast={toast} isDark={isDark} />
 
       {/* Header */}
-      <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
+      <header className="relative z-10 mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-lg" style={{ background: ACCENT }} />
           <div className="text-xl font-semibold tracking-wide" style={{ color: ACCENT }}>NEGVELAW</div>
           <div className={subtleText}>Visa Days Calculator</div>
         </div>
-        <nav className={"flex items-center gap-3 text-sm md:gap-6 " + (isDark ? "text-slate-300" : "text-slate-700")}>
+        <nav className={"flex flex-wrap items-center gap-3 text-sm sm:gap-6 " + (isDark ? "text-slate-300" : "text-slate-700") + " justify-start sm:justify-end"}>
           <a className="hover:opacity-90" href="#how">Как считать</a>
           <a className="hover:opacity-90" href="#share">Экспорт</a>
           <button
@@ -845,7 +845,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
       </header>
 
       {/* Steps */}
-      <section className="relative z-10 mx-auto max-w-7xl px-6 pb-4 pt-2">
+      <section className="relative z-10 mx-auto max-w-7xl px-4 pb-4 pt-2 sm:px-6">
         <div className="grid gap-4 md:grid-cols-3">
           <Step index={1} label="Выберите страну" active={true} done={true} isDark={isDark} />
           <Step index={2} label="Отметьте поездки" active={true} done={trips.length > 0} isDark={isDark} />
@@ -854,12 +854,12 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
       </section>
 
       {/* Controls */}
-      <section className="relative z-10 mx-auto max-w-7xl px-6 pb-4 pt-2">
-        <div className="grid items-start gap-4 md:grid-cols-12">
-          <Card isDark={isDark} className="md:col-span-7">
-            <div className="flex flex-col gap-6">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-                <div className="space-y-4 lg:w-[320px]">
+      <section className="relative z-10 mx-auto max-w-7xl px-4 pb-4 pt-2 sm:px-6">
+        <div className="grid items-start gap-4 md:grid-cols-12 lg:gap-6">
+          <Card isDark={isDark} className="md:col-span-7 min-w-0">
+            <div className="space-y-6">
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:items-start">
+                <div className="space-y-4">
                   <div className="space-y-2">
                     <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#475569" }}>Страна назначения</span>
                     <select
@@ -904,14 +904,14 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
                     <p className={"mt-3 text-xs leading-relaxed " + (isDark ? "text-slate-400" : "text-slate-500")}>{(selected as any).notes}</p>
                   </div>
                 </div>
-                <div className="flex-1 space-y-4">
+                <div className="min-w-0 space-y-4">
                   <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " rounded-2xl border p-5 shadow-sm space-y-4"}>
-                    <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <div className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Использование лимита</div>
                         <div className="mt-2 text-3xl font-semibold tabular-nums">{limit != null ? `${usedRolling} дн.` : "—"}</div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right">
                         <div className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Остаток</div>
                         <div className="mt-2 text-2xl font-semibold tabular-nums">{remainder != null ? `${remainder} дн.` : "—"}</div>
                         {usagePercent != null && <div className={"mt-1 text-xs " + subtleText}>{usagePercent}% лимита</div>}
@@ -948,7 +948,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
                   </div>
                 </div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {recommendationCards.map((card) => (
                   <div
                     key={card.id}
@@ -978,7 +978,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
           </Card>
 
           {/* Planner */}
-          <Card isDark={isDark} className="md:col-span-5">
+          <Card isDark={isDark} className="md:col-span-5 min-w-0">
             <div className="flex flex-col gap-5">
               <div>
                 <h2 className="text-lg font-semibold">Планировщик въезда</h2>
@@ -1044,7 +1044,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
       </section>
 
       {/* Calendar */}
-      <section className="relative z-10 mx-auto max-w-7xl px-6 pb-4 pt-2">
+      <section className="relative z-10 mx-auto max-w-7xl px-4 pb-4 pt-2 sm:px-6">
         <Card isDark={isDark}>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -1125,7 +1125,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
       </section>
 
       {/* Trips list and editor */}
-      <section className="relative z-10 mx-auto max-w-7xl px-6 pb-4 pt-2">
+      <section className="relative z-10 mx-auto max-w-7xl px-4 pb-4 pt-2 sm:px-6">
         <div className="grid gap-4 lg:grid-cols-2">
           <Card isDark={isDark}>
             <h2 className="text-lg font-semibold">Ручной ввод</h2>
@@ -1192,7 +1192,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
       </section>
 
       {/* How it works */}
-      <section id="how" className="relative z-10 mx-auto max-w-7xl px-6 pb-4 pt-2">
+      <section id="how" className="relative z-10 mx-auto max-w-7xl px-4 pb-4 pt-2 sm:px-6">
         <Card isDark={isDark}>
           <h2 className="text-lg font-semibold">Как считаются дни</h2>
           <div className="mt-3 space-y-2 text-sm" style={{ color: isDark ? "#CBD5E1" : "#334155" }}>
@@ -1204,7 +1204,7 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
       </section>
 
       {/* Share */}
-      <section id="share" className="relative z-10 mx-auto max-w-7xl px-6 pb-12 pt-2">
+      <section id="share" className="relative z-10 mx-auto max-w-7xl px-4 pb-12 pt-2 sm:px-6">
         <Card isDark={isDark}>
           <h2 className="text-lg font-semibold">Импорт и экспорт</h2>
           <p className={"text-sm " + subtleText}>Скачайте текущую историю или загрузите файл, чтобы поделиться с консультантом.</p>
