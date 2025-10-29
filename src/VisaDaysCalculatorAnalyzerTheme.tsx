@@ -268,17 +268,6 @@ function Timeline({ usedSet, start, end, isDark }: any) {
   );
 }
 
-function KPI({ label, value, sub, isDark, size = "lg" }: { label: string; value: React.ReactNode; sub?: React.ReactNode; isDark: boolean; size?: "sm" | "lg" }) {
-  const valueCls = size === "sm" ? "text-xl" : "text-3xl";
-  return (
-    <div className="rounded-2xl border p-4 shadow-sm" style={{ borderColor: isDark ? "rgba(255,255,255,.1)" : "#e2e8f0", background: isDark ? "rgba(255,255,255,.05)" : "#fff" }}>
-      <div className="text-xs" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>{label}</div>
-      <div className={`mt-1 tabular-nums font-semibold ${valueCls}`}>{value}</div>
-      {sub && <div className="mt-1 text-[11px]" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>{sub}</div>}
-    </div>
-  );
-}
-
 
 function YearCalendar({
   year,
@@ -636,10 +625,66 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
   const planDate = useMemo(() => (planISO ? parseISO(planISO) : null), [planISO]);
   const plannedMax = useMemo(() => (planDate ? maxStayIfEnterOn(trips, planDate, rule) : 0), [trips, planDate, rule]);
   const plannedExit = useMemo(() => (planDate && plannedMax > 0 ? toISO(addDaysUTC(planDate, plannedMax - 1)) : ""), [planDate, plannedMax]);
+  const canPushPlan = planDate != null && plannedMax > 0 && !!plannedExit;
+
+  const remainder = useMemo(() => (limit != null ? clamp(limit - usedRolling, 0, limit) : null), [limit, usedRolling]);
+  const usagePercent = useMemo(() => {
+    if (limit == null || limit <= 0) return null;
+    return Math.round(Math.min(100, (usedRolling / limit) * 100));
+  }, [limit, usedRolling]);
+  const ruleDescription = useMemo(() => {
+    switch (rule.type) {
+      case "rolling":
+        return `Можно ${rule.max} дн. за последние ${rule.window} дн.`;
+      case "perYear":
+        return `Можно ${rule.max} дн. за последние 365 дн.`;
+      case "perVisit":
+        return `Каждый визит не дольше ${rule.perVisit} дн.`;
+      case "comboTR":
+        return `Въезд до ${rule.perVisit} дн., общий предел ${rule.cap.max}/${rule.cap.window}`;
+      default:
+        return "";
+    }
+  }, [rule]);
+  const limitLabel = limit != null ? `${limit} дн.` : "Нет фиксированного лимита";
+  const windowRangeLabel = `${toISO(tlStart)} – ${toISO(asOf)}`;
 
   const todayMax = useMemo(() => maxStayIfEnterOn(trips, asOf, rule), [trips, asOf, rule]);
   const recAny = useMemo(() => findEarliestEntryForStay(trips, rule, asOf, 1), [trips, asOf, rule]);
   const recFull = useMemo(() => findEarliestEntryForStay(trips, rule, asOf, fullTarget(rule)), [trips, asOf, rule]);
+  const todayExit = todayMax > 0 ? toISO(addDaysUTC(asOf, todayMax - 1)) : "";
+
+  const recommendationCards = [
+    {
+      id: "today",
+      heading: "Въезд сейчас",
+      value: todayMax > 0 ? `${todayMax} дн.` : "Нет",
+      meta: `Дата въезда: ${toISO(asOf)}`,
+      note: todayExit ? `Выезд не позднее ${todayExit}` : "Лимит на сегодня израсходован",
+      action: todayMax > 0 ? () => setPlanISO(toISO(asOf)) : null,
+    },
+    {
+      id: "soon",
+      heading: "Ближайшее окно",
+      value: recAny ? `${recAny.max} дн.` : "Нет",
+      meta: recAny ? `Можно въехать ${toISO(recAny.date)}` : "В горизонте окна нет",
+      note: recAny ? "Подходит даже для короткой поездки" : "Попробуйте освободить дни",
+      action: recAny ? () => setPlanISO(toISO(recAny.date)) : null,
+    },
+    {
+      id: "full",
+      heading: `На максимум (${fullTarget(rule)} дн.)`,
+      value: recFull ? `${recFull.max} дн.` : "Нет",
+      meta: recFull ? `Рекомендуемый въезд ${toISO(recFull.date)}` : "Окно пока не доступно",
+      note: recFull ? "Подходит для длинного визита" : "Освободите больше дней",
+      action: recFull ? () => setPlanISO(toISO(recFull.date)) : null,
+    },
+  ];
+
+  const chipStyle = useMemo<React.CSSProperties>(
+    () => ({ color: isDark ? "#cbd5f5" : "#475569", background: "rgba(148,163,184,0.12)" }),
+    [isDark]
+  );
 
   const sortedTrips = useMemo(() => mergeIntervals(trips), [trips]);
   const totalDays = useMemo(() => sortedTrips.reduce((acc, t) => acc + diffDaysInc(t.end, t.start), 0), [sortedTrips]);
@@ -669,6 +714,16 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
     setStartISO("");
     setEndISO("");
     showToast("Поездка добавлена");
+  }
+  function pushPlanToForm() {
+    if (!planDate || plannedMax <= 0 || !plannedExit) {
+      showToast("Выберите дату с доступными днями", "warn");
+      return;
+    }
+    const entryISO = planISO || toISO(planDate);
+    setStartISO(entryISO);
+    setEndISO(plannedExit);
+    showToast("Диапазон подставлен в ручной ввод");
   }
   function clearAll() {
     if (typeof window !== "undefined" && !window.confirm("Удалить все?")) {
@@ -802,90 +857,186 @@ export default function VisaDaysCalculatorAnalyzerTheme() {
       <section className="relative z-10 mx-auto max-w-7xl px-6 pb-4 pt-2">
         <div className="grid items-start gap-4 md:grid-cols-12">
           <Card isDark={isDark} className="md:col-span-7">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start">
-              <div className="md:w-80">
-                <label className="text-sm" style={{ color: isDark ? "#CBD5E1" : "#334155" }}>Страна</label>
-                <select
-                  value={selected.code}
-                  onChange={(e) => setSelected((COUNTRY_PRESETS as any).find((c: any) => c.code === (e.target as any).value))}
-                  className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " w-full rounded-lg border px-3 py-2"}
-                >
-                  {(COUNTRY_PRESETS as any).map((c: any) => (
-                    <option key={c.code} value={c.code}>{c.name}</option>
-                  ))}
-                </select>
-                <div className={"mt-2 text-xs " + subtleText}>{(selected as any).notes}</div>
-              </div>
-              <div className="md:w-56">
-                <label className="text-sm" style={{ color: isDark ? "#CBD5E1" : "#334155" }}>Дата как «сегодня»</label>
-                <input
-                  type="date"
-                  value={asOfISO}
-                  onChange={(e) => {
-                    const v = (e.target as any).value;
-                    setAsOfISO(v);
-                    if (v) setYearView(parseISO(v).getUTCFullYear());
-                  }}
-                  className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " w-full rounded-lg border px-3 py-2"}
-                />
-                <div className="mt-1 text-[11px]" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
-                  Пусто = сегодня (UTC): {toISO(today)}
-                </div>
-              </div>
-              <div className="flex-1">
-                <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-                  <KPI isDark={isDark} label="Использовано" value={limit != null ? <span>{usedRolling}</span> : <span>—</span>} sub={<span>Окно: {toISO(addDaysUTC(asOf, -(tlWindow - 1)))} – {toISO(asOf)}</span>} />
-                  <KPI isDark={isDark} label="Осталось" value={limit != null ? <span>{clamp((limit as number) - usedRolling, 0, limit as number)}</span> : <span>—</span>} sub={<span>В рамках текущего окна</span>} />
-                  <KPI isDark={isDark} size="sm" label="Тип" value={<span>{rule.type === "rolling" ? "90/180" : rule.type === "perYear" ? "за год" : rule.type === "perVisit" ? "за визит" : "смешанное"}</span>} sub={<span>&nbsp;</span>} />
-                </div>
-                {hoverISO && (
-                  <div className="mt-2 text-xs" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
-                    Навели: {hoverISO} → {hoverUsed} {limit != null && <>из {limit}</>} дн.
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+                <div className="space-y-4 lg:w-[320px]">
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#475569" }}>Страна назначения</span>
+                    <select
+                      value={selected.code}
+                      onChange={(e) => setSelected((COUNTRY_PRESETS as any).find((c: any) => c.code === (e.target as any).value))}
+                      className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm"}
+                    >
+                      {(COUNTRY_PRESETS as any).map((c: any) => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
                   </div>
-                )}
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#475569" }}>Дата расчёта</span>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="date"
+                        value={asOfISO}
+                        onChange={(e) => {
+                          const v = (e.target as any).value;
+                          setAsOfISO(v);
+                          if (v) setYearView(parseISO(v).getUTCFullYear());
+                        }}
+                        className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm"}
+                      />
+                      <button
+                        onClick={() => {
+                          setAsOfISO("");
+                          setYearView(today.getUTCFullYear());
+                        }}
+                        className={(isDark ? "border-white/10 bg-white/5 text-slate-200" : "border-slate-200 bg-slate-50 text-slate-700") + " rounded-xl border px-3 py-2.5 text-sm font-medium hover:bg-white/10"}
+                        type="button"
+                      >
+                        Сегодня
+                      </button>
+                    </div>
+                    <p className={"text-xs " + subtleText}>Расчёт ведётся в UTC. Сейчас: {toISO(today)}</p>
+                  </div>
+                  <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50") + " rounded-2xl border p-4 shadow-sm"}>
+                    <div className="text-sm font-semibold">Правило пребывания</div>
+                    <p className={"mt-2 text-xs leading-relaxed " + (isDark ? "text-slate-300" : "text-slate-600")}>{ruleDescription}</p>
+                    <p className={"mt-3 text-xs leading-relaxed " + (isDark ? "text-slate-400" : "text-slate-500")}>{(selected as any).notes}</p>
+                  </div>
+                </div>
+                <div className="flex-1 space-y-4">
+                  <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " rounded-2xl border p-5 shadow-sm space-y-4"}>
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <div className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Использование лимита</div>
+                        <div className="mt-2 text-3xl font-semibold tabular-nums">{limit != null ? `${usedRolling} дн.` : "—"}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Остаток</div>
+                        <div className="mt-2 text-2xl font-semibold tabular-nums">{remainder != null ? `${remainder} дн.` : "—"}</div>
+                        {usagePercent != null && <div className={"mt-1 text-xs " + subtleText}>{usagePercent}% лимита</div>}
+                      </div>
+                    </div>
+                    {usagePercent != null ? (
+                      <div className={(isDark ? "bg-slate-800/70" : "bg-slate-200") + " h-2 w-full overflow-hidden rounded-full"}>
+                        <div className="h-full rounded-full transition-all duration-300" style={{ background: ACCENT, width: `${Math.max(6, usagePercent)}%` }} />
+                      </div>
+                    ) : (
+                      <div className={"text-xs leading-relaxed " + subtleText}>Правило без суммарного лимита — следите за длительностью каждого визита отдельно.</div>
+                    )}
+                    <div className="grid gap-2 text-xs sm:grid-cols-2">
+                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Окно расчёта: {windowRangeLabel}</span>
+                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Фиксированный лимит: {limitLabel}</span>
+                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Поездок отмечено: {sortedTrips.length}</span>
+                      <span className="rounded-lg px-2 py-1" style={chipStyle}>Дней в истории: {totalDays}</span>
+                    </div>
+                  </div>
+                  <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " rounded-2xl border p-5 shadow-sm space-y-3"}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Дни в текущем окне</div>
+                        <div className={"text-sm " + subtleText}>Окрашенные даты засчитываются в лимит. Наведите на календарь для точного числа.</div>
+                      </div>
+                      {hoverISO && (
+                        <div className="text-right text-sm">
+                          <div className="font-semibold tabular-nums">{hoverISO}</div>
+                          <div className={"text-xs " + subtleText}>{hoverUsed} дн. в окне</div>
+                        </div>
+                      )}
+                    </div>
+                    <Timeline usedSet={usedSet} start={addDaysUTC(asOf, -(tlWindow - 1))} end={asOf} isDark={isDark} />
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="mt-4">
-              <Timeline usedSet={usedSet} start={addDaysUTC(asOf, -(tlWindow - 1))} end={asOf} isDark={isDark} />
-            </div>
-
-            {/* Recommendations */}
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <div className="text-xs" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Сегодня</div>
-                <div className="mt-1 text-lg font-semibold">Можно {todayMax} дн.</div>
-                <button onClick={() => setPlanISO(toISO(asOf))} className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10">В планировщик</button>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <div className="text-xs" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Ранний въезд (≥1 день)</div>
-                <div className="mt-1 text-lg font-semibold">{recAny ? toISO(recAny.date) : "—"}</div>
-                <div className="text-xs" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>{recAny ? `Можно ${recAny.max} дн.` : "Нет окна в горизонте"}</div>
-                {recAny && <button onClick={() => setPlanISO(toISO(recAny.date))} className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10">В планировщик</button>}
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <div className="text-xs" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>На максимум (≈{fullTarget(rule)} дн.)</div>
-                <div className="mt-1 text-lg font-semibold">{recFull ? toISO(recFull.date) : "—"}</div>
-                <div className="text-xs" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>{recFull ? `Можно ${recFull.max} дн.` : "Нет окна в горизонте"}</div>
-                {recFull && <button onClick={() => setPlanISO(toISO(recFull.date))} className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10">В планировщик</button>}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {recommendationCards.map((card) => (
+                  <div
+                    key={card.id}
+                    className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " flex h-full flex-col justify-between rounded-2xl border p-4 shadow-sm"}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 text-xs uppercase tracking-wide" style={{ color: isDark ? "#cbd5f5" : "#475569" }}>
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-sm" style={{ background: `${ACCENT}22`, color: isDark ? ACCENT : "#3b2c14" }}>●</span>
+                        {card.heading}
+                      </div>
+                      <div className="mt-3 text-2xl font-semibold tabular-nums">{card.value}</div>
+                      <div className={"mt-2 text-sm " + subtleText}>{card.meta}</div>
+                      <div className={"mt-1 text-xs " + subtleText}>{card.note}</div>
+                    </div>
+                    {card.action && (
+                      <button
+                        onClick={card.action}
+                        className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50") + " mt-4 inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium hover:bg-white/10"}
+                      >
+                        В планировщик
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           </Card>
 
           {/* Planner */}
           <Card isDark={isDark} className="md:col-span-5">
-            <div className={"text-sm " + subtleText}>Планировщик въезда</div>
-            <div className="grid items-end gap-3 md:grid-cols-3">
+            <div className="flex flex-col gap-5">
               <div>
-                <label className="text-sm" style={{ color: isDark ? "#CBD5E1" : "#334155" }}>Если въехать</label>
-                <input type="date" value={planISO} onChange={(e) => setPlanISO((e.target as any).value)} className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " w-full rounded-lg border px-3 py-2"} />
+                <h2 className="text-lg font-semibold">Планировщик въезда</h2>
+                <p className={"mt-1 text-sm " + subtleText}>Выберите предполагаемую дату — калькулятор покажет доступную длительность визита и крайний срок выезда.</p>
               </div>
-              <div>
-                <label className="text-sm" style={{ color: isDark ? "#CBD5E1" : "#334155" }}>Можно находиться</label>
-                <div className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " rounded-lg border px-3 py-2 tabular-nums"}>{plannedMax ? `${plannedMax} дн.` : "—"}</div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Если въехать</span>
+                  <input
+                    type="date"
+                    value={planISO}
+                    onChange={(e) => setPlanISO((e.target as any).value)}
+                    className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm"}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Можно находиться</span>
+                  <div className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " rounded-xl border px-3 py-2.5 text-sm tabular-nums"}>{plannedMax ? `${plannedMax} дн.` : "—"}</div>
+                </div>
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-wide" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Выехать до</span>
+                  <div className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " rounded-xl border px-3 py-2.5 text-sm tabular-nums"}>{plannedExit || "—"}</div>
+                </div>
               </div>
-              <div>
-                <label className="text-sm" style={{ color: isDark ? "#CBD5E1" : "#334155" }}>Выехать до</label>
-                <div className={(isDark ? "border-white/10 bg-white/5 text-slate-100" : "border-slate-200 bg-white text-slate-800") + " rounded-lg border px-3 py-2 tabular-nums"}>{plannedExit || "—"}</div>
+              <div className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50") + " rounded-2xl border p-4 space-y-2"}>
+                {planDate ? (
+                  plannedMax > 0 ? (
+                    <>
+                      <div className="text-sm font-semibold">Въезд {planISO || toISO(planDate)} → {plannedExit}</div>
+                      <div className={"text-sm " + (isDark ? "text-emerald-200" : "text-emerald-700")}>Доступно {plannedMax} дн. пребывания.</div>
+                      <p className={"text-xs " + subtleText}>Чтобы сохранить поездку, нажмите «Подставить в ручной ввод» или отметьте дни прямо в календаре.</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-sm font-semibold">На дату {planISO || toISO(planDate)} нет свободных дней.</div>
+                      <p className={"text-xs " + subtleText}>Выберите дату из рекомендаций выше или освободите дни, сняв отметки в календаре.</p>
+                    </>
+                  )
+                ) : (
+                  <p className={"text-sm " + subtleText}>Выберите дату вручную или воспользуйтесь рекомендациями — мы сразу посчитаем лимит.</p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={pushPlanToForm}
+                  disabled={!canPushPlan}
+                  type="button"
+                  className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + ` inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${canPushPlan ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed"}`}
+                >
+                  Подставить в ручной ввод
+                </button>
+                <button
+                  onClick={() => setPlanISO("")}
+                  type="button"
+                  className={(isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white") + " inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm"}
+                >
+                  Сбросить дату
+                </button>
               </div>
             </div>
           </Card>
